@@ -1,123 +1,122 @@
 # DartAI Runtime — Ternary LLMs on llama.cpp, any GPU
 
-> **English summary.** DartAI Runtime is a build of [llama.cpp](https://github.com/ggml-org/llama.cpp) with two
-> new **ternary** quantization formats — **TQ1_1** (1.75 bits/weight) and **TQ2_1** (2.13 bits/weight) — plus
-> CPU, Vulkan and CUDA kernels for them and a **runtime kernel autotuner** that measures your GPU on first use.
-> It runs a **27B-parameter model (Qwen3.8-27B ternary, "Bonsai 2" by Prism ML) in 5.5–6.7 GB**, on NVIDIA
-> (GTX 10xx → RTX 50xx), AMD (RDNA, Strix Halo), Intel or CPU — Linux and Windows, no compilation, no Python.
-> OpenAI-compatible API out of the box. Ternary quality measured against the FP16 parent: within 0–2 points on
-> Winogrande and MMLU, on par with conventional 2-bit (Q2_K) at 66% of its size.
-> *Keywords: ternary LLM · 1.58-bit · 2-bit quantization · BitNet-style · low VRAM · 6 GB GPU · GTX 1060 ·
-> llama.cpp · GGUF · Vulkan · CUDA · AMD Strix Halo · Radeon 8060S · Qwen3.8-27B · Bonsai · Prism ML ·
-> local LLM · offline inference · OpenAI-compatible server · speculative decoding · kernel autotuning.*
+Run a **27-billion-parameter model in 5.5–6.7 GB** — on NVIDIA (CUDA), AMD / Intel / NVIDIA (Vulkan) or CPU.
+Prebuilt binaries for Linux and Windows; no compilation, no Python, no cloud. OpenAI-compatible API out of the box.
 
-## O que é isto
+*Keywords: ternary LLM · 1.58-bit · 2-bit quantization · BitNet-style · low VRAM · 6 GB GPU · GTX 1060 ·
+llama.cpp · GGUF · Vulkan · CUDA · AMD Strix Halo · Radeon 8060S · Qwen3.8-27B · Bonsai · Prism ML ·
+local LLM · offline inference · OpenAI-compatible server · speculative decoding · kernel autotuning.*
 
-**DartAI Runtime** é o [llama.cpp](https://github.com/ggml-org/llama.cpp) — o motor de inferência de LLMs
-locais mais usado do mundo — com dois formatos de peso novos, **TQ1_1** e **TQ2_1**, e os kernels que os
-fazem rodar rápido em GPU. Você baixa um pacote, baixa um modelo `.gguf` ternário e roda um servidor com
-API compatível com a da OpenAI na sua máquina. Sem instalar Python, CUDA ou driver especial; sem nuvem.
+## What this is
 
-**Para quem é**: quem quer rodar um modelo de **27 bilhões de parâmetros** numa placa comum — uma GTX 1060
-de 6 GB, um notebook com Radeon integrada, uma RTX de 8–12 GB — e não cabe com os formatos convencionais.
-O mesmo Qwen3.8-27B em Q4_K_M precisa de 15,6 GB; em Q2_K, 10,1 GB; em **TQ1_1, 5,5 GB**.
+**DartAI Runtime** is [llama.cpp](https://github.com/ggml-org/llama.cpp) — the most widely used engine for
+running LLMs locally — with two new weight formats, **TQ1_1** (1.75 bits/weight) and **TQ2_1** (2.13
+bits/weight), and the CPU, Vulkan and CUDA kernels that make them fast. You download a package, download a
+ternary `.gguf` model, and run a server with an OpenAI-compatible API on your own machine.
 
-## O que é "ternário"
+**Who it is for**: anyone who wants a **27B model on an ordinary GPU** — a 6 GB GTX 1060, a laptop with an
+integrated Radeon, an 8–12 GB RTX — where conventional formats do not fit. The same Qwen3.8-27B needs
+15.6 GB in Q4_K_M and 10.1 GB in Q2_K; in **TQ1_1 it needs 5.5 GB**.
 
-Um LLM comum guarda cada peso como um número de 16 bits. Quantização é reduzir isso: 8, 4, 2 bits por
-peso, trocando precisão por memória. **Ternário** é o extremo prático: cada peso só pode valer
-**−1, 0 ou +1** — três estados, o que dá log₂(3) ≈ 1,58 bits de informação por peso. Com o empacotamento
-e as escalas por bloco, os formatos DartAI ficam em **1,75 bpw (TQ1_1)** e **2,13 bpw (TQ2_1)**.
+## What "ternary" means
 
-Duas coisas fazem isso funcionar na prática, e as duas estão medidas neste repositório:
+A standard LLM stores each weight as a 16-bit number. Quantization shrinks that — 8, 4, 2 bits per weight —
+trading precision for memory. **Ternary** is the practical extreme: each weight can only be **−1, 0 or +1**.
+Three states carry log₂(3) ≈ 1.58 bits of information; with packing and per-block scales the DartAI formats
+land at **1.75 bpw (TQ1_1)** and **2.13 bpw (TQ2_1)**.
 
-- **O modelo tem que ser treinado ternário**, não convertido depois. Um modelo pós-quantizado a 2 bits
-  (IQ2_XXS, Q2_K) degrada; o Bonsai 2 da Prism ML é *treinado* com pesos ternários e segura a qualidade
-  do pai — é o checkpoint que este runtime roda. Por isso o TQ1_1 e o TQ2_1 dão exatamente a mesma
-  qualidade: são duas codificações *lossless* dos mesmos três estados.
-- **O kernel tem que aproveitar os bytes a menos.** Decode de LLM é limitado por banda de memória; ler
-  1,75 bits em vez de 16 por peso é o que faz um 27B decodificar a 44 t/s numa RTX 5070 Ti de notebook. Em
-  GPUs limitadas por latência (iGPUs), o trabalho de desempacotar os trits pesa mais — por isso o
-  sintonizador mede a sua GPU em vez de assumir.
+Two things make this work in practice, and both are measured in this repository:
 
-O que este runtime **não** é: não é um quantizador (você não converte seus próprios modelos para ternário
-aqui — isso é treino), e não é um app com interface — para isso existe o LlamaForge by DartAI.
+- **The model must be trained ternary, not converted afterwards.** A model post-quantized to 2 bits (IQ2_XXS,
+  Q2_K) degrades; Prism ML's Bonsai 2 is *trained* with ternary weights and keeps the parent's quality — that is
+  the checkpoint this runtime runs. It is also why TQ1_1 and TQ2_1 give exactly the same quality: they are two
+  lossless encodings of the same three states.
+- **The kernel must actually cash in the missing bytes.** LLM decode is memory-bandwidth-bound; reading 1.75
+  bits instead of 16 per weight is what makes a 27B decode at 44 tok/s on a laptop RTX 5070 Ti. On
+  latency-bound GPUs (integrated graphics) the cost of unpacking trits weighs more — which is why the runtime
+  **measures your GPU** instead of assuming.
 
-## Pacotes (v0.2.0)
-| arquivo | para | tamanho |
+What this runtime is **not**: it is not a quantizer (you cannot convert your own models to ternary here —
+that is training), and it has no GUI — for that there is *LlamaForge by DartAI*.
+
+## Packages (v0.2.0)
+| file | for | size |
 |---|---|---|
-| `dartai-linux-x64-vulkan-0.2.0.tar.gz` | Linux x86-64 (glibc ≥ 2.35), qualquer GPU com driver Vulkan 1.2+ (AMD, Intel, NVIDIA incl. GTX 10xx) e CPU | 32 MB |
-| `dartai-linux-x64-cuda12-0.2.0.tar.gz` | Linux x86-64, NVIDIA GTX 10xx → RTX 50xx (sm 61–120), runtime CUDA 12 incluído · driver ≥ 525 | 849 MB |
-| `dartai-windows-x64-vulkan-0.2.0.zip` | Windows 10/11 x64, qualquer GPU com driver Vulkan 1.2+ | 26 MB |
-| `dartai-windows-x64-cuda12-0.2.0.zip` | Windows 10/11 x64, NVIDIA GTX 10xx → RTX 50xx, DLLs CUDA 12 incluídas · driver ≥ 525 | 555 MB |
+| `dartai-linux-x64-vulkan-0.2.0.tar.gz` | Linux x86-64 (glibc ≥ 2.35), any GPU with a Vulkan 1.2+ driver (AMD, Intel, NVIDIA incl. GTX 10xx) and CPU | 32 MB |
+| `dartai-linux-x64-cuda12-0.2.0.tar.gz` | Linux x86-64, NVIDIA GTX 10xx → RTX 50xx (sm 61–120), CUDA 12 runtime included · driver ≥ 525 | 849 MB |
+| `dartai-windows-x64-vulkan-0.2.0.zip` | Windows 10/11 x64, any GPU with a Vulkan 1.2+ driver | 26 MB |
+| `dartai-windows-x64-cuda12-0.2.0.zip` | Windows 10/11 x64, NVIDIA GTX 10xx → RTX 50xx, CUDA 12 DLLs included · driver ≥ 525 | 555 MB |
 
-Confira os hashes em `SHA256SUMS`. Os pacotes Windows foram compilados com MSVC e validados numa GTX 1060
-(corretude dos kernels ternários e sintonizador).
+Verify hashes with `SHA256SUMS`. The Windows packages were built with MSVC and validated on a GTX 1060
+(ternary kernel correctness and the autotuner).
 
-## Modelos (Hugging Face, Apache 2.0 — não redistribuídos aqui)
-| modelo | formato | tamanho | quando |
+## Models (Hugging Face, Apache 2.0 — not redistributed here)
+| model | format | size | when |
 |---|---|---|---|
-| [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) | **TQ2_1** | 6,7 GB | GPU ≥ 8 GB, iGPU/RAM unificada ≥ 12 GB — **o mais rápido** |
-| Ternary-Bonsai-2-27B | **TQ1_1** | 5,5 GB | o menor; GPU de 6 GB com descarga parcial (ver limitações) |
-| Ternary-Bonsai-1.7B | TQ2_1 | 0,46 GB | teste rápido / máquinas fracas |
+| [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) | **TQ2_1** | 6.7 GB | GPU ≥ 8 GB, iGPU / unified memory ≥ 12 GB — **the fastest** |
+| Ternary-Bonsai-2-27B | **TQ1_1** | 5.5 GB | the smallest; 6 GB GPUs with partial offload (see limitations) |
+| Ternary-Bonsai-1.7B | TQ2_1 | 0.46 GB | quick test / weak machines |
 
-## Uso (Linux)
+## Usage
+**Linux**
 ```bash
 tar xzf dartai-linux-x64-cuda12-0.2.0.tar.gz && cd dartai-linux-x64-cuda12
-./dartai-run.sh ~/models/Ternary-Bonsai-2-27B-TQ2_1.gguf 8080 8192   # escolhe -ngl pela VRAM livre
-# API OpenAI-compatível em http://127.0.0.1:8080/v1 ; UI em http://127.0.0.1:8080
+./dartai-run.sh ~/models/Ternary-Bonsai-2-27B-TQ2_1.gguf 8080 8192   # picks -ngl from free VRAM
+# OpenAI-compatible API at http://127.0.0.1:8080/v1 ; web UI at http://127.0.0.1:8080
 ```
-Binário direto: `LD_LIBRARY_PATH=. ./llama-server -m modelo.gguf -ngl 99 -c 8192 --port 8080`.
+Direct binary: `LD_LIBRARY_PATH=. ./llama-server -m model.gguf -ngl 99 -c 8192 --port 8080`.
 
-**Windows**: descompacte o zip e rode `llama-server.exe -m modelo.gguf -ngl 99 -c 8192 --port 8080` de dentro da pasta (as DLLs ficam ao lado).
+**Windows**: unzip and run `llama-server.exe -m model.gguf -ngl 99 -c 8192 --port 8080` from inside the
+folder (the DLLs live next to it).
 
-## O que há de novo na 0.2.0
-- **Sintonizador de kernel por medição** (CUDA e Vulkan): na primeira inferência o runtime mede as
-  alternativas de kernel *na sua GPU* e guarda a escolha em `~/.cache/dartai/`. Medido: +8–12% de decode
-  e **+117% no especulativo** numa RTX 5070 Ti; **+22%** numa GTX 1060; +7% numa Radeon 8060S. Onde o
-  padrão já é o ótimo (Radeon 890M) ele não muda nada. `GGML_CUDA_TUNING=0` / `GGML_VK_TUNING=0` desligam.
-- Correção: TQ2_1 abortava no primeiro matmul em lote em GPUs Pascal, RDNA2 e RDNA3.
-- Pacote CUDA 40% menor; binários stripped.
+## What's new in 0.2.0
+- **Measurement-based kernel autotuner** (CUDA and Vulkan): on the first inference the runtime times the
+  kernel alternatives *on your GPU* and caches the choice in `~/.cache/dartai/` (Windows:
+  `%USERPROFILE%\.cache\dartai\`). Measured: +8–12% decode and **+117% speculative decoding** on an RTX 5070 Ti,
+  **+22%** on a GTX 1060, +7% on a Radeon 8060S. Where the default is already optimal (Radeon 890M) it changes
+  nothing — which is the correct behaviour. `GGML_CUDA_TUNING=0` / `GGML_VK_TUNING=0` disable it.
+- Fix: TQ2_1 aborted on the first batched matmul on Pascal, RDNA2 and RDNA3 GPUs.
+- CUDA package 40% smaller; stripped binaries; NVIDIA EULA included in the CUDA packages.
 
-## Medido (20/09/2026, Bonsai-2-27B, decode `tg128`, na tomada, perfil performance)
+## Measured (2026-09-20, Bonsai-2-27B, decode `tg128`, mains power, performance profile)
 | hardware | backend | TQ2_1 | TQ1_1 |
 |---|---|---|---|
-| RTX 5070 Ti Laptop 12 GB | CUDA | **44,4 t/s** | 27,7 t/s |
-| AMD Ryzen AI MAX+ 395 (Radeon 8060S, memória unificada) | Vulkan | 23,2 t/s | 19,7 t/s |
-| GTX 1060 6 GB | CUDA | não cabe | roda com 44/64 camadas na GPU (ver limitações) |
+| RTX 5070 Ti Laptop 12 GB | CUDA | **44.4 tok/s** | 27.7 tok/s |
+| AMD Ryzen AI MAX+ 395 (Radeon 8060S, unified memory) | Vulkan | 23.2 tok/s | 19.7 tok/s |
+| GTX 1060 6 GB | CUDA | does not fit | runs with 44/64 layers on GPU (see limitations) |
 
-Especulativo (draft DFlash2 Q4_K_M, `--spec-type draft-dflash`): **111,7 t/s** em código na 5070 Ti.
-Em iGPU o especulativo **piora** (−13%) — não use lá.
+Speculative decoding (DFlash2 Q4_K_M draft, `--spec-type draft-dflash`): **111.7 tok/s** on code on the
+5070 Ti. On integrated GPUs speculative decoding is **slower** (−13%) — do not use it there.
 
-## Qualidade
-Mesmas tarefas, mesma semente, `llama-perplexity` 0-shot por logprob (comparável **entre linhas**, não
-com números publicados):
+## Quality
+Same tasks, same seed, `llama-perplexity` 0-shot log-probability scoring (comparable **between rows**, not
+with published leaderboard numbers):
 
-| modelo | tamanho | Winogrande | HellaSwag | MMLU (1548) |
+| model | size | Winogrande | HellaSwag | MMLU (1548) |
 |---|---|---|---|---|
-| Qwen3.8-27B Q6_K_XL (pai) | 24,7 GB | 75,2 ± 1,9 | 82,3% | 42,0 ± 2,0 |
-| Qwen3.8-27B Q2_K (2-bit convencional) | 10,1 GB | 73,8 ± 2,0 | 76,3% | 38,7 ± 1,2 |
-| **Bonsai-2-27B TQ2_1 / TQ1_1** | **6,7 / 5,5 GB** | 73,2 ± 2,0 | 75,6% | **41,7 ± 1,3** |
+| Qwen3.8-27B Q6_K_XL (parent) | 24.7 GB | 75.2 ± 1.9 | 82.3% | 42.0 ± 2.0 |
+| Qwen3.8-27B Q2_K (conventional 2-bit) | 10.1 GB | 73.8 ± 2.0 | 76.3% | 38.7 ± 1.2 |
+| **Bonsai-2-27B TQ2_1 / TQ1_1** | **6.7 / 5.5 GB** | 73.2 ± 2.0 | 75.6% | **41.7 ± 1.3** |
 
-TQ1_1 e TQ2_1 dão o mesmo resultado (mesmos pesos). Em conhecimento o ternário fica no nível do pai e
-acima do 2-bit convencional (1,7σ), com 66% do tamanho deste. Para os benchmarks completos do modelo
-(MMLU-Redux, GSM8K, AIME, LiveCodeBench…) veja o
-[model card do Prism](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf).
+TQ1_1 and TQ2_1 give identical results (same weights). On knowledge the ternary model sits at the parent's
+level and above conventional 2-bit (1.7σ), at 66% of its size. Winogrande cross-checked with the standard
+lm-eval harness (0-shot, 1267 tasks): 73.5 ± 1.2. For the model's full benchmark suite (MMLU-Redux, GSM8K,
+AIME, LiveCodeBench…) see the [Prism model card](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf).
 
-## Limitações conhecidas (v0.2.0)
-- **GTX 1060 / placas de 6 GB com o 27B TQ1_1**: cabe com ~44 das 64 camadas na GPU (`dartai-run.sh`
-  calcula). Em prefill de lote grande pode estourar a VRAM nesta versão — use `-b 8 -ub 8`. Qualidade
-  idêntica; velocidade limitada pela CPU.
-- **TQ1_1 no CUDA** faz prefill pelo caminho cuBLAS (sem MMQ ainda): ~30% mais lento que o TQ2_1 em
-  lote. Decode não é afetado.
-- Vulkan exige driver **1.2+** (GTX 10xx: atualize o driver — o de 2017 expõe só Vulkan 1.0).
+## Known limitations (v0.2.0)
+- **GTX 1060 / 6 GB GPUs with the 27B TQ1_1**: fits with ~44 of 64 layers on the GPU (`dartai-run.sh`
+  computes it). Large-batch prefill can run out of VRAM in this version — use `-b 8 -ub 8`. Quality is
+  identical; speed is CPU-bound.
+- **TQ1_1 on CUDA** does prefill through the cuBLAS path (no MMQ yet): ~30% slower than TQ2_1 in batch. Decode
+  is unaffected.
+- Vulkan requires a **1.2+** driver (GTX 10xx: update the driver — the 2017 one exposes only Vulkan 1.0).
 
-## Licenças e atribuições
-- llama.cpp / ggml: MIT (`LICENSE-llama.cpp`). O pacote CUDA inclui bibliotecas de runtime NVIDIA sob a
-  EULA da NVIDIA (`LICENSE-cuda-runtime.txt` dentro do pacote).
-- Modelos Bonsai: Prism ML, Apache 2.0 — *Created using Bonsai by Prism ML.* Base Qwen3.8-27B: Alibaba
-  Cloud, Apache 2.0.
-- Formato inspirado em Georganas, Heinecke, Dubey, *Breaking the 1.58-bit Barrier for Ternary LLMs*
+## Licenses and attribution
+- llama.cpp / ggml: MIT (`LICENSE-llama.cpp`). The CUDA packages include NVIDIA runtime libraries under the
+  NVIDIA EULA (`LICENSE-cuda-runtime.txt`, inside the package and in this repository).
+- Bonsai models: Prism ML, Apache 2.0 — *Created using Bonsai by Prism ML.* Base Qwen3.8-27B: Alibaba Cloud,
+  Apache 2.0.
+- Format inspired by Georganas, Heinecke, Dubey, *Breaking the 1.58-bit Barrier for Ternary LLMs*
   (arXiv:2609.16338).
 
-DartAI é o laboratório de IA do grupo Dart. Código-fonte: fechado nesta fase.
+DartAI is the AI lab of the Dart group. Source code: closed at this stage.
