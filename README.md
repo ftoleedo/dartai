@@ -1,8 +1,47 @@
 # DartAI Runtime — Ternary LLMs on llama.cpp, any GPU
 
-Rode um **Qwen3.8-27B ternário em 5,5–6,7 GB** — em NVIDIA (CUDA), AMD/Intel/NVIDIA (Vulkan) ou CPU.
-Binários prontos; nenhuma compilação. Os formatos **TQ1_1** (1,75 bpw) e **TQ2_1** (2,13 bpw) são
-bit-exatos ao checkpoint ternário do Prism.
+> **English summary.** DartAI Runtime is a build of [llama.cpp](https://github.com/ggml-org/llama.cpp) with two
+> new **ternary** quantization formats — **TQ1_1** (1.75 bits/weight) and **TQ2_1** (2.13 bits/weight) — plus
+> CPU, Vulkan and CUDA kernels for them and a **runtime kernel autotuner** that measures your GPU on first use.
+> It runs a **27B-parameter model (Qwen3.8-27B ternary, "Bonsai 2" by Prism ML) in 5.5–6.7 GB**, on NVIDIA
+> (GTX 10xx → RTX 50xx), AMD (RDNA, Strix Halo), Intel or CPU — Linux and Windows, no compilation, no Python.
+> OpenAI-compatible API out of the box. Ternary quality measured against the FP16 parent: within 0–2 points on
+> Winogrande and MMLU, on par with conventional 2-bit (Q2_K) at 66% of its size.
+> *Keywords: ternary LLM · 1.58-bit · 2-bit quantization · BitNet-style · low VRAM · 6 GB GPU · GTX 1060 ·
+> llama.cpp · GGUF · Vulkan · CUDA · AMD Strix Halo · Radeon 8060S · Qwen3.8-27B · Bonsai · Prism ML ·
+> local LLM · offline inference · OpenAI-compatible server · speculative decoding · kernel autotuning.*
+
+## O que é isto
+
+**DartAI Runtime** é o [llama.cpp](https://github.com/ggml-org/llama.cpp) — o motor de inferência de LLMs
+locais mais usado do mundo — com dois formatos de peso novos, **TQ1_1** e **TQ2_1**, e os kernels que os
+fazem rodar rápido em GPU. Você baixa um pacote, baixa um modelo `.gguf` ternário e roda um servidor com
+API compatível com a da OpenAI na sua máquina. Sem instalar Python, CUDA ou driver especial; sem nuvem.
+
+**Para quem é**: quem quer rodar um modelo de **27 bilhões de parâmetros** numa placa comum — uma GTX 1060
+de 6 GB, um notebook com Radeon integrada, uma RTX de 8–12 GB — e não cabe com os formatos convencionais.
+O mesmo Qwen3.8-27B em Q4_K_M precisa de 15,6 GB; em Q2_K, 10,1 GB; em **TQ1_1, 5,5 GB**.
+
+## O que é "ternário"
+
+Um LLM comum guarda cada peso como um número de 16 bits. Quantização é reduzir isso: 8, 4, 2 bits por
+peso, trocando precisão por memória. **Ternário** é o extremo prático: cada peso só pode valer
+**−1, 0 ou +1** — três estados, o que dá log₂(3) ≈ 1,58 bits de informação por peso. Com o empacotamento
+e as escalas por bloco, os formatos DartAI ficam em **1,75 bpw (TQ1_1)** e **2,13 bpw (TQ2_1)**.
+
+Duas coisas fazem isso funcionar na prática, e as duas estão medidas neste repositório:
+
+- **O modelo tem que ser treinado ternário**, não convertido depois. Um modelo pós-quantizado a 2 bits
+  (IQ2_XXS, Q2_K) degrada; o Bonsai 2 da Prism ML é *treinado* com pesos ternários e segura a qualidade
+  do pai — é o checkpoint que este runtime roda. Por isso o TQ1_1 e o TQ2_1 dão exatamente a mesma
+  qualidade: são duas codificações *lossless* dos mesmos três estados.
+- **O kernel tem que aproveitar os bytes a menos.** Decode de LLM é limitado por banda de memória; ler
+  1,75 bits em vez de 16 por peso é o que faz um 27B decodificar a 44 t/s numa RTX 5070 Ti de notebook. Em
+  GPUs limitadas por latência (iGPUs), o trabalho de desempacotar os trits pesa mais — por isso o
+  sintonizador mede a sua GPU em vez de assumir.
+
+O que este runtime **não** é: não é um quantizador (você não converte seus próprios modelos para ternário
+aqui — isso é treino), e não é um app com interface — para isso existe o LlamaForge by DartAI.
 
 ## Pacotes (v0.2.0)
 | arquivo | para | tamanho |
