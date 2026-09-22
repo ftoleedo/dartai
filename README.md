@@ -19,9 +19,9 @@ Speculative decoding = DFlash2 Q4_K_M draft (`--spec-type draft-dflash`); its ga
 | **NVIDIA RTX 5070 Ti Laptop** (Blackwell) | 12 GB VRAM | CUDA | **44.4 tok/s** | 27.7 tok/s | **111.7 tok/s** on code (TQ2_1, n_max 7, 52% accepted) | 73.2 ± 2.0 / 75.6% / **41.7 ± 1.3** (1548 tasks) |
 | **AMD Radeon 8060S** (Ryzen AI MAX+ 395, Strix Halo, iGPU) | 128 GB unified RAM | Vulkan | 23.2 tok/s | 19.7 tok/s | prose **−13%**, code +6% — not worth it on an iGPU | parent ruler measured here: Q6_K_XL 75.2 / 82.3% / 42.0 |
 | **AMD Radeon 890M** (Ryzen AI 9 HX 370, Strix Point, iGPU) | 16 GB shared RAM | Vulkan | 8.9 tok/s | 6.7 tok/s | — | — |
-| **NVIDIA GTX 1060** (Pascal) | 6 GB VRAM | CUDA | does not fit | runs with 44/64 layers on GPU (`-ub 8`, see limitations) | does not fit | Winogrande **73.2 ± 2.0** — identical logits to the 5070 Ti |
+| **NVIDIA GTX 1060** (Pascal) | 6 GB VRAM | CUDA / Vulkan | 27B does not fit; **Bonsai-1.7B: 102 tok/s** (CUDA) | 27B runs with 44/64 layers on GPU (`-ub 8`, see limitations); **TriLM-3.9B: 35.4 tok/s** (Vulkan), 27.0 (CUDA, autotuner +22%) | does not fit | 27B Winogrande **73.2 ± 2.0** — identical logits to the 5070 Ti |
 
-Decode is `llama-bench tg128`, batch 1. On the 890M the numbers are from an earlier build (2026-09-18); the
+Decode is `llama-bench tg128`, batch 1. On the 1060 the 27B decode was not benchmarked (only the quality run, with partial offload); the tok/s shown are the smaller ternary models that fit entirely in 6 GB. On the 890M the numbers are from an earlier build (2026-09-18); the
 autotuner keeps the default kernel there, so they are representative. Quality rows are the same tasks and seed on
 every GPU (details in [Quality](#quality)); Winogrande on the 1060 reproduced the 5070 Ti score to four decimals,
 which is the correctness check: Pascal and Blackwell kernels compute the same logits.
