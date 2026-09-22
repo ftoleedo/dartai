@@ -7,6 +7,25 @@ Prebuilt binaries for Linux and Windows; no compilation, no Python, no cloud. Op
 llama.cpp · GGUF · Vulkan · CUDA · AMD Strix Halo · Radeon 8060S · Qwen3.8-27B · Bonsai · Prism ML ·
 local LLM · offline inference · OpenAI-compatible server · speculative decoding · kernel autotuning.*
 
+## Tested hardware at a glance
+
+Every number below was **measured** on the machine named, with the released binaries (Bonsai-2-27B, 2026-09-19..21,
+mains power). "—" means not measured; "does not fit" means the model + draft do not fit in that memory.
+Speculative decoding = DFlash2 Q4_K_M draft (`--spec-type draft-dflash`); its gain depends on the prompt
+(code accepts ~50–70% of draft tokens, prose less).
+
+| GPU | memory | backend | decode TQ2_1 | decode TQ1_1 | with speculative decoding | quality (Winogrande / HellaSwag / MMLU) |
+|---|---|---|---|---|---|---|
+| **NVIDIA RTX 5070 Ti Laptop** (Blackwell) | 12 GB VRAM | CUDA | **44.4 tok/s** | 27.7 tok/s | **111.7 tok/s** on code (TQ2_1, n_max 7, 52% accepted) | 73.2 ± 2.0 / 75.6% / **41.7 ± 1.3** (1548 tasks) |
+| **AMD Radeon 8060S** (Ryzen AI MAX+ 395, Strix Halo, iGPU) | 128 GB unified RAM | Vulkan | 23.2 tok/s | 19.7 tok/s | prose **−13%**, code +6% — not worth it on an iGPU | parent ruler measured here: Q6_K_XL 75.2 / 82.3% / 42.0 |
+| **AMD Radeon 890M** (Ryzen AI 9 HX 370, Strix Point, iGPU) | 16 GB shared RAM | Vulkan | 8.9 tok/s | 6.7 tok/s | — | — |
+| **NVIDIA GTX 1060** (Pascal) | 6 GB VRAM | CUDA | does not fit | runs with 44/64 layers on GPU (`-ub 8`, see limitations) | does not fit | Winogrande **73.2 ± 2.0** — identical logits to the 5070 Ti |
+
+Decode is `llama-bench tg128`, batch 1. On the 890M the numbers are from an earlier build (2026-09-18); the
+autotuner keeps the default kernel there, so they are representative. Quality rows are the same tasks and seed on
+every GPU (details in [Quality](#quality)); Winogrande on the 1060 reproduced the 5070 Ti score to four decimals,
+which is the correctness check: Pascal and Blackwell kernels compute the same logits.
+
 ## What this is
 
 **DartAI Runtime** is [llama.cpp](https://github.com/ggml-org/llama.cpp) — the most widely used engine for
@@ -77,16 +96,6 @@ folder (the DLLs live next to it).
   nothing — which is the correct behaviour. `GGML_CUDA_TUNING=0` / `GGML_VK_TUNING=0` disable it.
 - Fix: TQ2_1 aborted on the first batched matmul on Pascal, RDNA2 and RDNA3 GPUs.
 - CUDA package 40% smaller; stripped binaries; NVIDIA EULA included in the CUDA packages.
-
-## Measured (2026-09-20, Bonsai-2-27B, decode `tg128`, mains power, performance profile)
-| hardware | backend | TQ2_1 | TQ1_1 |
-|---|---|---|---|
-| RTX 5070 Ti Laptop 12 GB | CUDA | **44.4 tok/s** | 27.7 tok/s |
-| AMD Ryzen AI MAX+ 395 (Radeon 8060S, unified memory) | Vulkan | 23.2 tok/s | 19.7 tok/s |
-| GTX 1060 6 GB | CUDA | does not fit | runs with 44/64 layers on GPU (see limitations) |
-
-Speculative decoding (DFlash2 Q4_K_M draft, `--spec-type draft-dflash`): **111.7 tok/s** on code on the
-5070 Ti. On integrated GPUs speculative decoding is **slower** (−13%) — do not use it there.
 
 ## Quality
 Same tasks, same seed, `llama-perplexity` 0-shot log-probability scoring (comparable **between rows**, not
